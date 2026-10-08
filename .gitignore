@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Lawn bowls: never commit signing material or build output
+*.exe
+*.apk
+*.p12
+*.keystore
+*.jks
+signing.pass
