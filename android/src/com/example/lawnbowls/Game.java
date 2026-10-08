@@ -55,6 +55,7 @@ final class Game {
     int tossWinner;
     String tossText = "";
     private double endWait;
+    private boolean jackDitchNoted;
 
     int state = ST_IDLE;
     int endNo = 1, endsPlayed = 0, deadEnds = 0;
@@ -170,6 +171,7 @@ final class Game {
     private void beginEnd() {
         balls.clear(); trails.clear();
         mood[0] *= 0.6; mood[1] *= 0.6;
+        jackDitchNoted = false;
         left[0] = left[1] = BOWLS_EACH;
         jackFails = 0;
         deliverer = starter;
@@ -397,6 +399,11 @@ final class Game {
         if (s.jackDead) {
             deadEnd(s.jackReason);
             return;
+        }
+        Ball jk = Rules.jack(balls);
+        if (jk != null && jk.alive && jk.y < Physics.RY0 && !jackDitchNoted) {
+            jackDitchNoted = true;
+            sb.append("Jack in the ditch is LIVE (Law 18.1): play on. Bowls touching it there are not touchers (14.3).\n");
         }
         react(d);
         for (int i = balls.size() - 1; i >= 0; i--) if (!balls.get(i).alive) balls.remove(i);

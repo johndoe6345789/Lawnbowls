@@ -15,7 +15,7 @@ rm -rf $OUT && mkdir -p $OUT/classes
 $BT/aapt2 compile --dir res -o $OUT/res.zip
 $BT/aapt2 link -o $OUT/base.apk -I $AJ --manifest AndroidManifest.xml \
     --min-sdk-version $MIN_SDK --target-sdk-version $TARGET_SDK \
-    --version-code 4 --version-name 4.0 --auto-add-overlay $OUT/res.zip
+    --version-code 5 --version-name 4.1 --auto-add-overlay $OUT/res.zip
 
 # 2. compile Java and convert to dex (release: no debug info)
 javac --release 11 -Xlint:all -Xlint:-options -cp $AJ -d $OUT/classes src/com/example/lawnbowls/*.java

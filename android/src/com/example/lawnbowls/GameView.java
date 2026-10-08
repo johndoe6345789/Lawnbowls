@@ -422,6 +422,8 @@ public class GameView extends View implements Physics.Listener, Game.Events {
                 fill.setColor(Color.WHITE);
                 c.drawRect((float) b.x - 2.5f, (float) (Physics.RY0 - Physics.DITCH) - 9, (float) b.x + 2.5f,
                         (float) (Physics.RY0 - Physics.DITCH) - 1, fill);
+                if (b.jack) label(c, "LIVE JACK (Law 18)", (float) Math.max(70, Math.min(W - 70, b.x)),
+                        (float) (Physics.RY0 - Physics.DITCH) - 14, 10.5f, Color.rgb(255, 236, 150), bold, Paint.Align.CENTER);
             }
         }
 
