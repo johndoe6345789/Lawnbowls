@@ -1,0 +1,120 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BUILD_TOOLS_VERSION: "37.0.0"   # Android 17
+  PLATFORM: "android-37.0"        # API 37
+
+jobs:
+  test:
+    name: JVM tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Compile engine and tests
+        run: |
+          javac -d build/sim \
+            android/src/com/example/lawnbowls/{Ball,Physics,Rules,Ai,Ego,Game}.java \
+            android/test/com/example/lawnbowls/*.java
+      - name: Rules and match simulation (Sim)
+        run: java -cp build/sim com.example.lawnbowls.Sim
+      - name: Spectator mode (SpecTest)
+        run: java -cp build/sim com.example.lawnbowls.SpecTest
+
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install Android SDK (build-tools ${{ env.BUILD_TOOLS_VERSION }}, ${{ env.PLATFORM }})
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "build-tools;$BUILD_TOOLS_VERSION" "platforms;$PLATFORM" > /dev/null
+      - name: Version
+        id: version
+        # versionCode must keep increasing between releases so installs upgrade in place.
+        run: |
+          echo "code=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
+          echo "name=4.1.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+      - name: Signing key
+        env:
+          SIGNING_P12_BASE64: ${{ secrets.ANDROID_SIGNING_P12_BASE64 }}
+          SIGNING_PASS: ${{ secrets.ANDROID_SIGNING_PASS }}
+        run: |
+          if [ -n "$SIGNING_P12_BASE64" ] && [ -n "$SIGNING_PASS" ]; then
+            echo "$SIGNING_P12_BASE64" | base64 -d > android/signing.p12
+            printf '%s' "$SIGNING_PASS" > android/signing.pass
+            chmod 600 android/signing.p12 android/signing.pass
+          else
+            echo "::warning::ANDROID_SIGNING_P12_BASE64 / ANDROID_SIGNING_PASS not set; signing with a throwaway key, so each build will not install over the previous one."
+          fi
+      - name: Build
+        # build.sh picks up build-tools/platform 37 from the runner's ANDROID_HOME.
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: android/build.sh
+      - name: Verify
+        run: |
+          BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
+          "$BT/apksigner" verify -v android/build/lawn_bowls.apk
+          "$BT/aapt2" dump badging android/build/lawn_bowls.apk | grep -E "^package:|targetSdkVersion"
+          "$BT/aapt2" dump badging android/build/lawn_bowls.apk | grep -q "targetSdkVersion:'37'"
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/signing.p12 android/signing.pass
+      - name: Rename APK
+        run: mv android/build/lawn_bowls.apk "android/build/lawn-bowls-${{ steps.version.outputs.name }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lawn-bowls-apk
+          path: android/build/lawn-bowls-*.apk
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: android-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: lawn-bowls-apk
+          path: dist
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version_name }}
+        run: |
+          cd dist
+          sha256sum *.apk > SHA256SUMS
+          gh release create "v$VERSION" *.apk SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Lawn Bowls $VERSION" \
+            --notes "Android build of ${GITHUB_SHA::7} on main (targetSdk 37 / Android 17, minSdk 30)." \
+            --latest
