@@ -4,9 +4,16 @@ set -euo pipefail
 cd "$(dirname "$0")"
 unset JAVA_TOOL_OPTIONS
 
-BT=/home/claude/sdk/android-37.0           # build-tools 37 + platform 37 (android.jar)
-AJ=$BT/android.jar
+# SDK location: set BUILD_TOOLS/ANDROID_JAR directly, or ANDROID_HOME with build-tools 37 + platform 37 installed.
+if [ -n "${ANDROID_HOME:-}" ]; then
+    BT=${BUILD_TOOLS:-$ANDROID_HOME/build-tools/37.0.0}
+    AJ=${ANDROID_JAR:-$ANDROID_HOME/platforms/android-37.0/android.jar}
+else
+    BT=${BUILD_TOOLS:-/home/claude/sdk/android-37.0}   # build-tools 37 + platform 37 (android.jar)
+    AJ=${ANDROID_JAR:-$BT/android.jar}
+fi
 MIN_SDK=30; TARGET_SDK=37
+VERSION_CODE=${VERSION_CODE:-5}; VERSION_NAME=${VERSION_NAME:-4.1}
 OUT=build
 
 rm -rf $OUT && mkdir -p $OUT/classes
@@ -15,7 +22,7 @@ rm -rf $OUT && mkdir -p $OUT/classes
 $BT/aapt2 compile --dir res -o $OUT/res.zip
 $BT/aapt2 link -o $OUT/base.apk -I $AJ --manifest AndroidManifest.xml \
     --min-sdk-version $MIN_SDK --target-sdk-version $TARGET_SDK \
-    --version-code 5 --version-name 4.1 --auto-add-overlay $OUT/res.zip
+    --version-code $VERSION_CODE --version-name $VERSION_NAME --auto-add-overlay $OUT/res.zip
 
 # 2. compile Java and convert to dex (release: no debug info)
 javac --release 11 -Xlint:all -Xlint:-options -cp $AJ -d $OUT/classes src/com/example/lawnbowls/*.java
